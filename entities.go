@@ -7,6 +7,10 @@ import (
 
 type Coin string
 
+func (c Coin) String() string {
+	return string(c)
+}
+
 const (
 	BTC Coin = "BTC"
 	ETH Coin = "ETH"
@@ -28,24 +32,24 @@ type CoinAmount struct {
 }
 
 type Admin struct {
-	ID           uint64
+	ID           uint
 	Login        string
 	PasswordHash []byte
 }
 
 type Project struct {
-	ID   string `json:"id"`
+	ID   uint   `json:"id"`
 	Name string `json:"name"`
 }
 
 type ProjectBalance struct {
-	ProjectID   string
+	ProjectID   uint
 	ProjectName string
 	Coins       []CoinAmount
 }
 
 type User struct {
-	ID             uint64
+	ID             uint
 	ExternalID     string
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
@@ -70,8 +74,8 @@ type UserEmailConfirmation struct {
 }
 
 type UserAddress struct {
-	UserID  uint64
-	Coin    string
+	UserID  uint
+	Coin    Coin
 	Address string
 }
 
