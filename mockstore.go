@@ -105,7 +105,7 @@ func (ms *MockStore) RemoveUserAddress(userID uint, coin Coin, address string) e
 }
 
 func (ms *MockStore) GetUserAddresses(userID uint) ([]UserAddress, error) {
-	args := ms.Called()
+	args := ms.Called(userID)
 	uas := args.Get(0)
 	if uas == nil {
 		return nil, args.Error(1)
@@ -184,7 +184,7 @@ func (ms *MockStore) ProjectsBalances() ([]ProjectBalance, error) {
 
 func (ms *MockStore) ProjectUsersBalances(projectID uint) ([]UserBalance,
 	error) {
-	args := ms.Called()
+	args := ms.Called(projectID)
 	ubs := args.Get(0)
 	if ubs == nil {
 		return nil, args.Error(1)
