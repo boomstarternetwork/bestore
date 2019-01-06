@@ -3,6 +3,8 @@ package bestore
 import (
 	"database/sql"
 	"errors"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jinzhu/gorm"
@@ -373,27 +375,194 @@ func (s *DBStore) RemoveUserEmailConfirmation(userID uint) error {
 
 func (s *DBStore) GetProject(projectID uint) (p Project, err error) {
 	err = s.gdb.Where(&Project{ID: projectID}).Take(&p).Error
+	ps := []Project{p}
+	err = s.setProjectsMiningStats(ps)
+	p = ps[0]
 	return
 }
 
-func (s *DBStore) AddProject(projectName string) error {
-	return s.gdb.Create(&Project{Name: projectName}).Error
+func (s *DBStore) AddProject(p Project) (Project, error) {
+	np := Project{
+		UserID:           p.UserID,
+		Status:           Draft,
+		Goal:             p.Goal,
+		DurationDays:     p.DurationDays,
+		CategoryID:       p.CategoryID,
+		CityID:           p.CityID,
+		Title:            p.Title,
+		ShortDescription: p.ShortDescription,
+		FullDescription:  p.FullDescription,
+		CoverURL:         p.CoverURL,
+		VideoURL:         p.VideoURL,
+		FacebookURL:      p.FacebookURL,
+		TwitterURL:       p.TwitterURL,
+		Raised:           decimal.Zero,
+		RaisedDate:       time.Now(),
+		EarnBestMiner:    decimal.Zero,
+	}
+	err := s.gdb.Create(&np).Error
+	return np, err
 }
 
-func (s *DBStore) SetProjectName(projectID uint, name string) error {
-	return s.gdb.Model(&Project{}).
-		Where(&Project{ID: projectID}).
-		Update(&Project{Name: name}).
+func (s *DBStore) checkProjectOwner(projectID uint, userID uint) error {
+	var exists bool
+	err := s.gdb.Raw(`
+		SELECT EXISTS(
+			SELECT 1
+			FROM projects
+			WHERE id = $1 AND user_id = $2
+		)
+	`, projectID, userID).Scan(&exists).Error
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return ErrInvalidProjectOwner
+	}
+	return nil
+}
+
+func (s *DBStore) SetProject(p Project) error {
+	err := s.checkProjectOwner(p.ID, p.UserID)
+	if err != nil {
+		return err
+	}
+
+	np := Project{
+		ID:               p.ID,
+		Status:           Draft,
+		Goal:             p.Goal,
+		DurationDays:     p.DurationDays,
+		CategoryID:       p.CategoryID,
+		CityID:           p.CityID,
+		Title:            p.Title,
+		ShortDescription: p.ShortDescription,
+		FullDescription:  p.FullDescription,
+		CoverURL:         p.CoverURL,
+		VideoURL:         p.VideoURL,
+		FacebookURL:      p.FacebookURL,
+		TwitterURL:       p.TwitterURL,
+	}
+
+	return np
+}
+
+func (s *DBStore) GetProjects(limit uint, offset uint, userID uint,
+	statuses []ProjectStatus) (ps []Project, total uint, err error) {
+
+	q := s.gdb.Model(&Project{}).
+		Where(&Project{UserID: userID}).
+		Where("status IN (?)", statuses)
+
+	err = q.Count(&total).Error
+	if err != nil {
+		return
+	}
+
+	err = q.Order("created_at DESC").
+		Limit(limit).
+		Offset(offset).
+		Find(&ps).
 		Error
-}
+	if err != nil {
+		return
+	}
 
-func (s *DBStore) RemoveProject(projectID uint) error {
-	return s.gdb.Where(&Project{ID: projectID}).Delete(&Project{}).Error
-}
+	err = s.setProjectsMiningStats(ps)
 
-func (s *DBStore) GetProjects() (ps []Project, err error) {
-	err = s.gdb.Order("name").Find(&ps).Error
 	return
+}
+
+func (s *DBStore) setProjectsMiningStats(ps []Project) error {
+	idToIdx := map[uint]int{}
+	var ids []string
+
+	for i, p := range ps {
+		idToIdx[p.ID] = i
+		ids = append(ids, strconv.FormatUint(uint64(p.ID), 10))
+	}
+
+	rows, err := s.gdb.DB().Query(`
+		SELECT projectid, SUM(amount), MAX(updated), MAX(amount)
+		FROM balances
+		WHERE projectid IN (` + strings.Join(ids, ",") + `)
+		GROUP BY projectid
+	`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var (
+			projectID     uint
+			raised        string
+			raisedDate    time.Time
+			earnBestMiner string
+			err           error
+		)
+
+		err = rows.Scan(&projectID, &raised, &raisedDate, &earnBestMiner)
+		if err != nil {
+			return err
+		}
+
+		i := idToIdx[projectID]
+
+		ps[i].Raised, err = decimal.NewFromString(raised)
+		if err != nil {
+			return err
+		}
+
+		ps[i].RaisedDate = raisedDate
+
+		ps[i].EarnBestMiner, err = decimal.NewFromString(earnBestMiner)
+		if err != nil {
+			return err
+		}
+
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *DBStore) CheckCategoryID(categoryID uint) error {
+	var exists bool
+	err := s.gdb.Raw(`
+		SELECT EXISTS(
+			SELECT 1
+			FROM project_categories
+			WHERE id = $1
+		)
+	`, categoryID).Scan(&exists).Error
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return ErrInvalidCategoryID
+	}
+	return nil
+}
+
+func (s *DBStore) CheckCityID(cityID uint) error {
+	var exists bool
+	err := s.gdb.Raw(`
+		SELECT EXISTS(
+			SELECT 1
+			FROM cities
+			WHERE id = $1
+		)
+	`, cityID).Scan(&exists).Error
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return ErrInvalidCityID
+	}
+	return nil
 }
 
 func (s *DBStore) ProjectsBalances() ([]ProjectBalance, error) {
@@ -455,14 +624,14 @@ func (s *DBStore) ProjectsBalances() ([]ProjectBalance, error) {
 				ProjectID:   projectID,
 				ProjectName: projectName,
 				Coins: []CoinAmount{
-					{Coin: coin, Amount: amountDec.String()},
+					{Coin: coin, Amount: amountDec},
 				},
 			})
 		} else {
 			// Otherwise, we adding next coin data.
 			balances[len(balances)-1].Coins = append(
 				balances[len(balances)-1].Coins, CoinAmount{
-					Coin: coin, Amount: amountDec.String()})
+					Coin: coin, Amount: amountDec})
 		}
 	}
 
@@ -525,14 +694,14 @@ func (s *DBStore) ProjectUsersBalances(projectID uint) (
 			balances = append(balances, UserBalance{
 				Email: email,
 				Coins: []CoinAmount{
-					{Coin: coin, Amount: amountDec.String()},
+					{Coin: coin, Amount: amountDec},
 				},
 			})
 		} else {
 			// Otherwise, we adding next coin data.
 			balances[len(balances)-1].Coins = append(
 				balances[len(balances)-1].Coins,
-				CoinAmount{Coin: coin, Amount: amountDec.String()})
+				CoinAmount{Coin: coin, Amount: amountDec})
 		}
 	}
 

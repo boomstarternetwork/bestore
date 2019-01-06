@@ -3,6 +3,8 @@ package bestore
 import (
 	"errors"
 	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 type Coin string
@@ -28,7 +30,7 @@ func ParseCoin(s string) (Coin, error) {
 
 type CoinAmount struct {
 	Coin   Coin
-	Amount string
+	Amount decimal.Decimal
 }
 
 type Admin struct {
@@ -37,9 +39,46 @@ type Admin struct {
 	PasswordHash []byte
 }
 
-type Project struct {
+type ProjectStatus string
+
+const (
+	Draft             ProjectStatus = "draft"
+	DraftRejected     ProjectStatus = "draftRejected"
+	DraftOnModeration ProjectStatus = "draftOnModeration"
+	Active            ProjectStatus = "active"
+	Failed            ProjectStatus = "failed"
+	Success           ProjectStatus = "success"
+)
+
+func (s ProjectStatus) String() string {
+	return string(s)
+}
+
+type ProjectCategory struct {
 	ID   uint   `json:"id"`
 	Name string `json:"name"`
+}
+
+type Project struct {
+	ID               uint            `json:"id"`
+	UserID           uint            `json:"user"`
+	CreatedAt        time.Time       `json:"-"`
+	Status           ProjectStatus   `json:"status"`
+	Goal             decimal.Decimal `json:"goal"`
+	DurationDays     uint            `json:"duration"`
+	CategoryID       uint            `json:"category"`
+	CityID           uint            `json:"city"`
+	Title            string          `json:"title"`
+	ShortDescription string          `json:"shortDescription"`
+	FullDescription  string          `json:"fullDescription"`
+	CoverURL         string          `json:"cover"`
+	VideoURL         string          `json:"video"`
+	FacebookURL      string          `json:"facebook"`
+	TwitterURL       string          `json:"twitter"`
+	Raised           decimal.Decimal `json:"raised" gorm:"-"`
+	RaisedDate       time.Time       `json:"raisedDate" gorm:"-"`
+	EarnBestMiner    decimal.Decimal `json:"earnBestMiner" gorm:"-"`
+	IsMiningOpen     bool            `json:"isMiningOpen" gorm:"-"`
 }
 
 type ProjectBalance struct {
@@ -49,16 +88,19 @@ type ProjectBalance struct {
 }
 
 type User struct {
-	ID             uint
-	ExternalID     string
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
-	DeletedAt      *time.Time
-	Email          string
-	EmailConfirmed bool
-	PasswordHash   []byte
-	Name           string
-	AvatarURL      string
+	ID                     uint       `json:"id"`
+	ExternalID             string     `json:"-"`
+	CreatedAt              time.Time  `json:"-"`
+	UpdatedAt              time.Time  `json:"-"`
+	DeletedAt              *time.Time `json:"-"`
+	Email                  string     `json:"-"`
+	EmailConfirmed         bool       `json:"-"`
+	PasswordHash           []byte     `json:"-"`
+	Name                   string     `json:"name"`
+	About                  string     `json:"about"`
+	AvatarURL              string     `json:"avatar"`
+	MiningProjectID        uint       `json:"-"`
+	MiningProjectUpdatedAt time.Time  `json:"-"`
 }
 
 type UserPasswordReset struct {
@@ -73,6 +115,12 @@ type UserEmailConfirmation struct {
 	Email  string
 }
 
+type UserMiningProject struct {
+	UserID    uint
+	ProjectID uint
+	UpdatedAt time.Time
+}
+
 type UserAddress struct {
 	UserID  uint
 	Coin    Coin
@@ -82,4 +130,15 @@ type UserAddress struct {
 type UserBalance struct {
 	Email string
 	Coins []CoinAmount
+}
+
+type Country struct {
+	ID   uint   `json:"id"`
+	Name string `json:"name"`
+}
+
+type City struct {
+	ID        uint   `json:"id"`
+	CountryID uint   `json:"country"`
+	Name      string `json:"name"`
 }

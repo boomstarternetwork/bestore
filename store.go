@@ -39,11 +39,17 @@ type Store interface {
 		error)
 	RemoveUserEmailConfirmation(userID uint) error
 
+	GetUserMiningProject(userID uint) (UserMiningProject, error)
+
 	GetProject(projectID uint) (Project, error)
-	AddProject(projectName string) error
-	SetProjectName(projectID uint, name string) error
-	RemoveProject(projectID uint) error
-	GetProjects() ([]Project, error)
+	AddProject(p Project) (Project, error)
+	SetProject(p Project) (Project, error)
+	GetProjects(limit uint, offset uint, userID uint,
+		statuses []ProjectStatus) ([]Project, uint, error)
+
+	CheckCategoryID(categoryID uint) error
+
+	CheckCityID(cityID uint) error
 
 	ProjectsBalances() ([]ProjectBalance, error)
 	ProjectUsersBalances(projectID uint) ([]UserBalance, error)
@@ -65,4 +71,22 @@ func InvalidLoginOrPassword(err error) bool {
 
 func InvalidEmailOrPassword(err error) bool {
 	return NotFound(err) || err == bcrypt.ErrMismatchedHashAndPassword
+}
+
+var ErrInvalidCategoryID = errors.New("invalid category ID")
+
+func InvalidCategoryID(err error) bool {
+	return err == ErrInvalidCategoryID
+}
+
+var ErrInvalidCityID = errors.New("invalid city ID")
+
+func InvalidCityID(err error) bool {
+	return err == ErrInvalidCityID
+}
+
+var ErrInvalidProjectOwner = errors.New("invalid project owner")
+
+func InvalidProjectOwner(err error) bool {
+	return err == ErrInvalidProjectOwner
 }
