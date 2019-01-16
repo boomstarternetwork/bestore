@@ -1,7 +1,6 @@
 package bestore
 
 import (
-	"database/sql"
 	"errors"
 	"strconv"
 	"strings"
@@ -34,73 +33,6 @@ func NewDBStore(connStr string, runMode string) (*DBStore, error) {
 	}
 
 	return &DBStore{gdb: gdb}, nil
-}
-
-func generatePassword() (string, error) {
-	return password.Generate(12, 4, 4, false, true)
-}
-
-func (s *DBStore) AddAdmin(adminLogin string) (string, error) {
-	pswd, err := generatePassword()
-	if err != nil {
-		return "", errors.New("failed to generate password: " + err.Error())
-	}
-
-	hash, err := bcrypt.GenerateFromPassword([]byte(pswd), bcrypt.DefaultCost)
-	if err != nil {
-		return "", errors.New("failed to hash password: " + err.Error())
-	}
-
-	return pswd, s.gdb.Create(&Admin{
-		Login:        adminLogin,
-		PasswordHash: hash,
-	}).Error
-}
-
-func (s *DBStore) CheckAdminPassword(adminLogin string,
-	adminPassword string) error {
-	var a Admin
-	err := s.gdb.Where(&Admin{Login: adminLogin}).Take(&a).Error
-	if err != nil {
-		return err
-	}
-	return bcrypt.CompareHashAndPassword(a.PasswordHash, []byte(adminPassword))
-}
-
-func (s *DBStore) ResetAdminPassword(adminID uint) (string, error) {
-	pswd, err := generatePassword()
-	if err != nil {
-		return "", errors.New("failed to generate password: " + err.Error())
-	}
-
-	hash, err := bcrypt.GenerateFromPassword([]byte(pswd), bcrypt.DefaultCost)
-	if err != nil {
-		return "", errors.New("failed to hash password: " + err.Error())
-	}
-
-	return pswd, s.gdb.Model(&Admin{}).
-		Where(&Admin{ID: adminID}).
-		Update(&Admin{PasswordHash: hash}).
-		Error
-}
-
-func (s *DBStore) RemoveAdmin(adminID uint) error {
-	return s.gdb.Where(&Admin{ID: adminID}).Delete(&Admin{}).Error
-}
-
-func (s *DBStore) GetAdmins() ([]Admin, error) {
-	var admins []Admin
-
-	err := s.gdb.Order("login ASC").Find(&admins).Error
-	if err != nil {
-		return nil, err
-	}
-
-	for _, a := range admins {
-		a.PasswordHash = nil
-	}
-
-	return admins, nil
 }
 
 func (s *DBStore) AddUser(externalID, email, password, name, avatarURL string) (
@@ -235,32 +167,6 @@ func (s DBStore) GetUsers() (us []User, err error) {
 	return
 }
 
-func (s DBStore) AddUserAddress(userID uint, coin Coin,
-	address string) error {
-	return s.gdb.Create(&UserAddress{
-		UserID:  userID,
-		Coin:    coin,
-		Address: address,
-	}).Error
-}
-
-func (s DBStore) RemoveUserAddress(userID uint, coin Coin,
-	address string) error {
-	return s.gdb.Where(&UserAddress{
-		UserID:  userID,
-		Coin:    coin,
-		Address: address,
-	}).Delete(&UserAddress{}).Error
-}
-
-func (s DBStore) GetUserAddresses(userID uint) (addrs []UserAddress,
-	err error) {
-	err = s.gdb.Where(&UserAddress{UserID: userID}).
-		Find(&addrs).
-		Error
-	return
-}
-
 func (s *DBStore) AddUserPasswordReset(userID uint) (UserPasswordReset, error) {
 
 	var pr UserPasswordReset
@@ -384,7 +290,7 @@ func (s *DBStore) GetProject(projectID uint) (p Project, err error) {
 func (s *DBStore) AddProject(p Project) (Project, error) {
 	np := Project{
 		UserID:           p.UserID,
-		Status:           Draft,
+		Status:           DraftPS,
 		Goal:             p.Goal,
 		DurationDays:     p.DurationDays,
 		CategoryID:       p.CategoryID,
@@ -422,15 +328,35 @@ func (s *DBStore) checkProjectOwner(projectID uint, userID uint) error {
 	return nil
 }
 
+var ErrNotInDraftStatus = errors.New("project is not in draft status")
+
 func (s *DBStore) SetProject(p Project) error {
 	err := s.checkProjectOwner(p.ID, p.UserID)
 	if err != nil {
 		return err
 	}
 
+	tx := s.gdb.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+
+	var c int
+
+	err = tx.Model(&Project{ID: p.ID}).
+		Where(&Project{ID: p.ID, Status: DraftPS}).
+		Count(&c).Error
+	if err != nil {
+		tx.Rollback()
+		return tx.Error
+	}
+
+	if c != 1 {
+		return errors.New("project is not in draft status")
+	}
+
 	np := Project{
 		ID:               p.ID,
-		Status:           Draft,
 		Goal:             p.Goal,
 		DurationDays:     p.DurationDays,
 		CategoryID:       p.CategoryID,
@@ -444,14 +370,22 @@ func (s *DBStore) SetProject(p Project) error {
 		TwitterURL:       p.TwitterURL,
 	}
 
-	return np
+	err = tx.Save(&np).Error
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	return tx.Commit().Error
 }
 
 func (s *DBStore) GetProjects(limit uint, offset uint, userID uint,
-	statuses []ProjectStatus) (ps []Project, total uint, err error) {
+	categoryID uint, statuses []ProjectStatus) (ps []Project, total uint,
+	err error) {
 
 	q := s.gdb.Model(&Project{}).
 		Where(&Project{UserID: userID}).
+		Where(&Project{CategoryID: categoryID}).
 		Where("status IN (?)", statuses)
 
 	err = q.Count(&total).Error
@@ -547,6 +481,34 @@ func (s *DBStore) CheckCategoryID(categoryID uint) error {
 	return nil
 }
 
+func (s *DBStore) AddCountry(id uint, name string) error {
+	return s.gdb.Create(&Country{
+		ID:   id,
+		Name: name,
+	}).Error
+}
+
+func (s *DBStore) GetCountries() (cs []Country, err error) {
+	err = s.gdb.Model(&Country{}).Find(&cs).Error
+	return
+}
+
+func (s *DBStore) AddCity(id uint, countryID uint, name string) error {
+	return s.gdb.Create(&City{
+		ID:        id,
+		CountryID: countryID,
+		Name:      name,
+	}).Error
+}
+
+func (s *DBStore) GetCities(countryID uint) (cs []City, err error) {
+	err = s.gdb.Model(&City{}).
+		Where(&City{CountryID: countryID}).
+		Find(&cs).
+		Error
+	return
+}
+
 func (s *DBStore) CheckCityID(cityID uint) error {
 	var exists bool
 	err := s.gdb.Raw(`
@@ -565,145 +527,10 @@ func (s *DBStore) CheckCityID(cityID uint) error {
 	return nil
 }
 
-func (s *DBStore) ProjectsBalances() ([]ProjectBalance, error) {
-	var balances []ProjectBalance
-
-	rows, err := s.gdb.DB().Query(`
-		SELECT p.id, p.name, b.coin, SUM(b.amount)
-		FROM projects AS p
-			LEFT JOIN balances AS b
-				ON p.id = b.project_id
-  		GROUP BY p.id, p.name, b.coin
-  		ORDER BY p.name ASC, b.coin ASC;
-	`)
-	if err != nil {
-		return balances, err
-	}
-	defer rows.Close()
-
-	var (
-		projectID   uint
-		projectName string
-		coinStr     sql.NullString
-		amount      sql.NullString
-	)
-
-	for rows.Next() {
-		err = rows.Scan(&projectID, &projectName, &coinStr, &amount)
-		if err != nil {
-			return balances, err
-		}
-
-		if !coinStr.Valid || !amount.Valid {
-			// If balances for project is empty we can get null coin and amount.
-			// In that case just add project id and name without coins.
-			balances = append(balances, ProjectBalance{
-				ProjectID:   projectID,
-				ProjectName: projectName,
-			})
-			continue
-		}
-
-		// Use decimal to properly truncate trailing zeros from string.
-		amountDec, err := decimal.NewFromString(amount.String)
-		if err != nil {
-			return balances, err
-		}
-
-		coin, err := ParseCoin(coinStr.String)
-		if err != nil {
-			return balances, err
-		}
-
-		if len(balances) == 0 ||
-			balances[len(balances)-1].ProjectID != projectID {
-			// If this is first project or next project we initing it
-			// in balances array.
-
-			balances = append(balances, ProjectBalance{
-				ProjectID:   projectID,
-				ProjectName: projectName,
-				Coins: []CoinAmount{
-					{Coin: coin, Amount: amountDec},
-				},
-			})
-		} else {
-			// Otherwise, we adding next coin data.
-			balances[len(balances)-1].Coins = append(
-				balances[len(balances)-1].Coins, CoinAmount{
-					Coin: coin, Amount: amountDec})
-		}
-	}
-
-	return balances, rows.Err()
-}
-
-func (s *DBStore) ProjectUsersBalances(projectID uint) (
-	[]UserBalance, error) {
-	var balances []UserBalance
-
-	rows, err := s.gdb.DB().Query(`
-		SELECT u.email, b.coin, SUM(b.amount)
-		FROM users AS u
-			LEFT JOIN balances AS b
-				ON ua.address = b.address
-		WHERE b.project_id = $1
-		GROUP BY u.email, b.coin
-		ORDER BY u.email ASC, b.coin ASC;
-	`, projectID)
-	if err != nil {
-		return balances, err
-	}
-	defer rows.Close()
-
-	var (
-		email   string
-		coinStr sql.NullString
-		amount  sql.NullString
-	)
-
-	for rows.Next() {
-		err = rows.Scan(&email, &coinStr, &amount)
-		if err != nil {
-			return balances, err
-		}
-
-		if !coinStr.Valid || !amount.Valid {
-			// If balances for user is empty we can get null coin and amount.
-			// In that case just add user email without coins.
-			balances = append(balances, UserBalance{
-				Email: email,
-			})
-			continue
-		}
-
-		// Use decimal to properly truncate trailing zeros from string.
-		amountDec, err := decimal.NewFromString(amount.String)
-		if err != nil {
-			return balances, err
-		}
-
-		coin, err := ParseCoin(coinStr.String)
-		if err != nil {
-			return balances, err
-		}
-
-		if len(balances) == 0 || balances[len(balances)-1].Email != email {
-			// If this is first user or next user we initing it
-			// in balances array.
-			balances = append(balances, UserBalance{
-				Email: email,
-				Coins: []CoinAmount{
-					{Coin: coin, Amount: amountDec},
-				},
-			})
-		} else {
-			// Otherwise, we adding next coin data.
-			balances[len(balances)-1].Coins = append(
-				balances[len(balances)-1].Coins,
-				CoinAmount{Coin: coin, Amount: amountDec})
-		}
-	}
-
-	return balances, rows.Err()
+func (s *DBStore) GetProjectCategories() (pcs []ProjectCategory, err error) {
+	err = s.gdb.Model(&ProjectCategory{}).
+		Order("name ASC").
+		Find(&pcs).
+		Error
+	return
 }

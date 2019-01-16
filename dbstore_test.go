@@ -33,9 +33,7 @@ func initTestingStore() {
 
 func createTestingTables() {
 	s.gdb.AutoMigrate(
-		&Admin{},
 		&User{},
-		&UserAddress{},
 		&UserPasswordReset{},
 		&UserEmailConfirmation{},
 		&Project{},
@@ -44,9 +42,7 @@ func createTestingTables() {
 
 func dropTestingTables() {
 	s.gdb.DropTableIfExists(
-		&Admin{},
 		&User{},
-		&UserAddress{},
 		&UserPasswordReset{},
 		&UserEmailConfirmation{},
 		&Project{},

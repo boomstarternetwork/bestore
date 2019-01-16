@@ -11,30 +11,7 @@ type MockStore struct {
 func NewMockStore() *MockStore {
 	return &MockStore{}
 }
-func (ms *MockStore) AddAdmin(adminLogin string) (string, error) {
-	args := ms.Called(adminLogin)
-	return args.String(0), args.Error(1)
-}
-func (ms *MockStore) CheckAdminPassword(adminLogin string, adminPassword string) error {
-	args := ms.Called(adminLogin, adminPassword)
-	return args.Error(0)
-}
-func (ms *MockStore) ResetAdminPassword(adminID uint) (string, error) {
-	args := ms.Called(adminID)
-	return args.String(0), args.Error(1)
-}
-func (ms *MockStore) RemoveAdmin(adminID uint) error {
-	args := ms.Called(adminID)
-	return args.Error(0)
-}
-func (ms *MockStore) GetAdmins() ([]Admin, error) {
-	args := ms.Called()
-	admins := args.Get(0)
-	if admins == nil {
-		return nil, args.Error(1)
-	}
-	return admins.([]Admin), args.Error(1)
-}
+
 func (ms *MockStore) AddUser(externalID, email, password, name, avatarURL string) (User, error) {
 	args := ms.Called(externalID, email, password, name, avatarURL)
 	return args.Get(0).(User), args.Error(1)
@@ -92,25 +69,6 @@ func (ms *MockStore) GetUsers() ([]User, error) {
 		return nil, args.Error(1)
 	}
 	return users.([]User), args.Error(1)
-}
-
-func (ms *MockStore) AddUserAddress(userID uint, coin Coin, address string) error {
-	args := ms.Called(userID, coin, address)
-	return args.Error(0)
-}
-
-func (ms *MockStore) RemoveUserAddress(userID uint, coin Coin, address string) error {
-	args := ms.Called(userID, coin, address)
-	return args.Error(0)
-}
-
-func (ms *MockStore) GetUserAddresses(userID uint) ([]UserAddress, error) {
-	args := ms.Called(userID)
-	uas := args.Get(0)
-	if uas == nil {
-		return nil, args.Error(1)
-	}
-	return uas.([]UserAddress), args.Error(1)
 }
 
 func (ms *MockStore) GetUserPasswordReset(code string) (UserPasswordReset, error) {
@@ -171,23 +129,4 @@ func (ms *MockStore) GetProjects() ([]Project, error) {
 		return nil, args.Error(1)
 	}
 	return projects.([]Project), args.Error(1)
-}
-
-func (ms *MockStore) ProjectsBalances() ([]ProjectBalance, error) {
-	args := ms.Called()
-	pbs := args.Get(0)
-	if pbs == nil {
-		return nil, args.Error(1)
-	}
-	return pbs.([]ProjectBalance), args.Error(1)
-}
-
-func (ms *MockStore) ProjectUsersBalances(projectID uint) ([]UserBalance,
-	error) {
-	args := ms.Called(projectID)
-	ubs := args.Get(0)
-	if ubs == nil {
-		return nil, args.Error(1)
-	}
-	return ubs.([]UserBalance), args.Error(1)
 }

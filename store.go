@@ -3,17 +3,13 @@ package bestore
 import (
 	"errors"
 
+	"github.com/shopspring/decimal"
+
 	"github.com/jinzhu/gorm"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type Store interface {
-	AddAdmin(adminLogin string) (string, error)
-	CheckAdminPassword(adminLogin string, adminPassword string) error
-	ResetAdminPassword(adminID uint) (string, error)
-	RemoveAdmin(adminID uint) error
-	GetAdmins() ([]Admin, error)
-
 	AddUser(externalID, email, password, name, avatarURL string) (User, error)
 	GetUserByID(userID uint) (User, error)
 	GetUserByExternalID(externalID string) (User, error)
@@ -26,9 +22,14 @@ type Store interface {
 	SetUserAvatarURL(userID uint, avatarURL string) error
 	GetUsers() ([]User, error)
 
-	AddUserAddress(userID uint, coin Coin, address string) error
-	RemoveUserAddress(userID uint, coin Coin, address string) error
-	GetUserAddresses(userID uint) ([]UserAddress, error)
+	CheckProjectCategoryID(categoryID uint) error
+
+	AddCountry(id uint, name string) error
+	GetCountries() ([]Country, error)
+
+	AddCity(id uint, countryID uint, name string) error
+	GetCities(countryID uint) ([]City, error)
+	CheckCityID(cityID uint) error
 
 	GetUserPasswordReset(code string) (UserPasswordReset, error)
 	AddUserPasswordReset(userID uint) (UserPasswordReset, error)
@@ -39,20 +40,25 @@ type Store interface {
 		error)
 	RemoveUserEmailConfirmation(userID uint) error
 
+	GetUserKYC(userID uint) (UserKYC, error)
+	SetUserKYC(kyc UserKYC) error
+
+	SetUserMiningCredential(userID uint, login string) (string, error)
+
 	GetUserMiningProject(userID uint) (UserMiningProject, error)
+	SetUserMiningProject(userID uint, projectID uint) error
 
 	GetProject(projectID uint) (Project, error)
 	AddProject(p Project) (Project, error)
 	SetProject(p Project) (Project, error)
-	GetProjects(limit uint, offset uint, userID uint,
+	SetProjectModerationStatus(projectID uint,
+		moderationStatus OperationStatus) error
+	GetProjects(limit uint, offset uint, userID uint, categoryID uint,
 		statuses []ProjectStatus) ([]Project, uint, error)
 
-	CheckCategoryID(categoryID uint) error
+	GetProjectCategories() ([]ProjectCategory, error)
 
-	CheckCityID(cityID uint) error
-
-	ProjectsBalances() ([]ProjectBalance, error)
-	ProjectUsersBalances(projectID uint) ([]UserBalance, error)
+	GetMinedByUser(projectID uint, userID uint) (decimal.Decimal, error)
 }
 
 func NotFound(err error) bool {
