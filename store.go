@@ -10,7 +10,8 @@ import (
 )
 
 type Store interface {
-	AddUser(externalID, email, password, name, avatarURL string) (User, error)
+	AddUser(externalID, email, password, name, avatarURL,
+		ethAddress string) (User, error)
 	GetUserByID(userID uint) (User, error)
 	GetUserByExternalID(externalID string) (User, error)
 	GetUserByEmail(email string) (User, error)
@@ -47,6 +48,14 @@ type Store interface {
 
 	GetUserMiningProject(userID uint) (UserMiningProject, error)
 	SetUserMiningProject(userID uint, projectID uint) error
+
+	GetUserWithdraw(userID uint) (UserWithdraw, error)
+	// SetUserWithdraw should error if status is WIP
+	SetUserWithdraw(userID uint, status OperationStatus,
+		amount decimal.Decimal) error
+	// RemoveUserWithdraw should error if exists and status is not
+	// Success or Failure.
+	RemoveUserWithdraw(userID uint) error
 
 	GetProject(projectID uint) (Project, error)
 	AddProject(p Project) (Project, error)
@@ -96,3 +105,6 @@ var ErrInvalidProjectOwner = errors.New("invalid project owner")
 func InvalidProjectOwner(err error) bool {
 	return err == ErrInvalidProjectOwner
 }
+
+var ErrUserWithdrawAlreadyInWIP = errors.New(
+	"user withdraw already in WIP status")

@@ -17,6 +17,7 @@ type User struct {
 	PasswordHash   []byte     `json:"-"`
 	Name           string     `json:"name"`
 	AvatarURL      string     `json:"avatar"`
+	EthAddress     string     `json:"-"`
 }
 
 type ProjectCategory struct {
@@ -79,6 +80,7 @@ type Project struct {
 	VideoURL                string          `json:"video"`
 	FacebookURL             string          `json:"facebook"`
 	TwitterURL              string          `json:"twitter"`
+	EthAddress              string          `json:"-"`
 	Raised                  decimal.Decimal `json:"raised" gorm:"-"`
 	RaisedDate              time.Time       `json:"raisedDate" gorm:"-"`
 	EarnBestMiner           decimal.Decimal `json:"earnBestMiner" gorm:"-"`
@@ -128,7 +130,8 @@ type UserMiningProject struct {
 	UpdatedAt time.Time
 }
 
-type UserAddress struct {
-	UserID     uint
-	EthAddress string
+type UserWithdraw struct {
+	UserID uint
+	Status OperationStatus
+	Amount decimal.Decimal
 }
