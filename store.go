@@ -3,9 +3,8 @@ package bestore
 import (
 	"errors"
 
-	"github.com/shopspring/decimal"
-
 	"github.com/jinzhu/gorm"
+	"github.com/shopspring/decimal"
 	"golang.org/x/crypto/bcrypt"
 )
 

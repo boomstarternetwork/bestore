@@ -8,10 +8,8 @@ import (
 	"testing"
 
 	"github.com/jinzhu/gorm"
-
-	"golang.org/x/crypto/bcrypt"
-
 	"github.com/stretchr/testify/assert"
+	"golang.org/x/crypto/bcrypt"
 )
 
 const (
@@ -63,8 +61,6 @@ func TestMain(m *testing.M) {
 }
 
 func Test_DBStore_implementsStore(t *testing.T) {
-	createTestingTables(t)
-	defer dropTestingTables(t)
 	//var _ Store = &DBStore{}
 	var dbs interface{} = &DBStore{}
 	_, ok := dbs.(Store)
