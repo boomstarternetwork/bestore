@@ -2,7 +2,9 @@ package bestore
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/jinzhu/gorm"
@@ -31,22 +33,28 @@ func initTestingStore() {
 	}
 }
 
-func createTestingTables() {
-	s.gdb.AutoMigrate(
-		&User{},
-		&UserPasswordReset{},
-		&UserEmailConfirmation{},
-		&Project{},
-	)
+func runSQL(t *testing.T, filePath string) {
+	sql, err := ioutil.ReadFile(filePath)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+
+	requests := strings.Split(string(sql), ";")
+
+	for _, request := range requests {
+		_, err := s.gdb.DB().Exec(request)
+		if err != nil {
+			t.Fatal(err.Error())
+		}
+	}
 }
 
-func dropTestingTables() {
-	s.gdb.DropTableIfExists(
-		&User{},
-		&UserPasswordReset{},
-		&UserEmailConfirmation{},
-		&Project{},
-	)
+func createTestingTables(t *testing.T) {
+	runSQL(t, "createdb.sql")
+}
+
+func dropTestingTables(t *testing.T) {
+	runSQL(t, "cleandb.sql")
 }
 
 func TestMain(m *testing.M) {
@@ -55,286 +63,17 @@ func TestMain(m *testing.M) {
 }
 
 func Test_DBStore_implementsStore(t *testing.T) {
+	createTestingTables(t)
+	defer dropTestingTables(t)
 	//var _ Store = &DBStore{}
 	var dbs interface{} = &DBStore{}
 	_, ok := dbs.(Store)
 	assert.True(t, ok)
 }
 
-func Test_DBStore_AddAdmin_success(t *testing.T) {
-	createTestingTables()
-	defer dropTestingTables()
-
-	pswd, err := s.AddAdmin("login")
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	assert.NotEmpty(t, pswd)
-
-	var admins []Admin
-
-	s.gdb.Find(&admins)
-
-	if !assert.Len(t, admins, 1) {
-		return
-	}
-
-	assert.Equal(t, uint(1), admins[0].ID)
-	assert.Equal(t, "login", admins[0].Login)
-	assert.NoError(t, bcrypt.CompareHashAndPassword(admins[0].PasswordHash,
-		[]byte(pswd)))
-}
-
-func Test_DBStore_CheckAdminPassword_success(t *testing.T) {
-	createTestingTables()
-	defer dropTestingTables()
-
-	password1 := "password1"
-	passwordHash1, err := bcrypt.GenerateFromPassword([]byte(password1),
-		bcrypt.DefaultCost)
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	password2 := "password2"
-	passwordHash2, err := bcrypt.GenerateFromPassword([]byte(password2),
-		bcrypt.DefaultCost)
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	err = s.gdb.Create(&Admin{
-		Login:        "login1",
-		PasswordHash: passwordHash1,
-	}).Error
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	err = s.gdb.Create(&Admin{
-		Login:        "login2",
-		PasswordHash: passwordHash2,
-	}).Error
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	err = s.CheckAdminPassword("login1", "password1")
-	assert.NoError(t, err)
-}
-
-func Test_DBStore_CheckAdminPassword_wrongLogin(t *testing.T) {
-	createTestingTables()
-	defer dropTestingTables()
-
-	password1 := "password1"
-	passwordHash1, err := bcrypt.GenerateFromPassword([]byte(password1),
-		bcrypt.DefaultCost)
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	password2 := "password2"
-	passwordHash2, err := bcrypt.GenerateFromPassword([]byte(password2),
-		bcrypt.DefaultCost)
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	err = s.gdb.Create(&Admin{
-		Login:        "login1",
-		PasswordHash: passwordHash1,
-	}).Error
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	err = s.gdb.Create(&Admin{
-		Login:        "login2",
-		PasswordHash: passwordHash2,
-	}).Error
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	err = s.CheckAdminPassword("login3", "password1")
-	assert.Error(t, err)
-	assert.True(t, InvalidLoginOrPassword(err))
-}
-
-func Test_DBStore_CheckAdminPassword_wrongPassword(t *testing.T) {
-	createTestingTables()
-	defer dropTestingTables()
-
-	password1 := "password1"
-	passwordHash1, err := bcrypt.GenerateFromPassword([]byte(password1),
-		bcrypt.DefaultCost)
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	password2 := "password2"
-	passwordHash2, err := bcrypt.GenerateFromPassword([]byte(password2),
-		bcrypt.DefaultCost)
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	err = s.gdb.Create(&Admin{
-		Login:        "login1",
-		PasswordHash: passwordHash1,
-	}).Error
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	err = s.gdb.Create(&Admin{
-		Login:        "login2",
-		PasswordHash: passwordHash2,
-	}).Error
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	err = s.CheckAdminPassword("login1", "password2")
-	assert.Error(t, err)
-	assert.True(t, InvalidLoginOrPassword(err))
-}
-
-func Test_DBStore_ResetAdminPassword_success(t *testing.T) {
-	createTestingTables()
-	defer dropTestingTables()
-
-	password1 := "password1"
-	passwordHash1, err := bcrypt.GenerateFromPassword([]byte(password1),
-		bcrypt.DefaultCost)
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	password2 := "password2"
-	passwordHash2, err := bcrypt.GenerateFromPassword([]byte(password2),
-		bcrypt.DefaultCost)
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	err = s.gdb.Create(&Admin{
-		Login:        "login1",
-		PasswordHash: passwordHash1,
-	}).Error
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	err = s.gdb.Create(&Admin{
-		Login:        "login2",
-		PasswordHash: passwordHash2,
-	}).Error
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	newPswd, err := s.ResetAdminPassword(1)
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	var admins []Admin
-
-	err = s.gdb.Order("id ASC").Find(&admins).Error
-	if !assert.NoError(t, err) {
-		return
-	}
-	if !assert.Len(t, admins, 2) {
-		return
-	}
-
-	assert.Equal(t, "login1", admins[0].Login)
-	assert.NotEqual(t, passwordHash1, admins[0].PasswordHash)
-	assert.Equal(t, "login2", admins[1].Login)
-	assert.Equal(t, passwordHash2, admins[1].PasswordHash)
-
-	assert.NoError(t, bcrypt.CompareHashAndPassword(admins[0].PasswordHash,
-		[]byte(newPswd)))
-}
-
-func Test_DBStore_RemoveAdmin_success(t *testing.T) {
-	createTestingTables()
-	defer dropTestingTables()
-
-	err := s.gdb.Create(&Admin{
-		Login:        "login1",
-		PasswordHash: []byte("password-hash1"),
-	}).Error
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	err = s.gdb.Create(&Admin{
-		Login:        "login2",
-		PasswordHash: []byte("password-hash2"),
-	}).Error
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	err = s.RemoveAdmin(1)
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	var admins []Admin
-
-	err = s.gdb.Find(&admins).Error
-	if !assert.NoError(t, err) {
-		return
-	}
-	if !assert.Len(t, admins, 1) {
-		return
-	}
-
-	assert.Equal(t, "login2", admins[0].Login)
-	assert.Equal(t, []byte("password-hash2"), admins[0].PasswordHash)
-}
-
-func Test_DBStore_GetAdmins_success(t *testing.T) {
-	createTestingTables()
-	defer dropTestingTables()
-
-	err := s.gdb.Create(&Admin{
-		Login:        "login2",
-		PasswordHash: []byte("password-hash2"),
-	}).Error
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	err = s.gdb.Create(&Admin{
-		Login:        "login1",
-		PasswordHash: []byte("password-hash1"),
-	}).Error
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	wantAdmins := []Admin{
-		{ID: 2, Login: "login1", PasswordHash: []byte("password-hash1")},
-		{ID: 1, Login: "login2", PasswordHash: []byte("password-hash2")},
-	}
-
-	admins, err := s.GetAdmins()
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	assert.Equal(t, wantAdmins, admins)
-}
-
 func Test_DBStore_AddUser_createSuccess(t *testing.T) {
-	createTestingTables()
-	defer dropTestingTables()
+	createTestingTables(t)
+	defer dropTestingTables(t)
 
 	u, err := s.AddUser("external-id", "Email", "pswd", "name", "aurl")
 	if !assert.NoError(t, err) {
@@ -363,8 +102,8 @@ func Test_DBStore_AddUser_createSuccess(t *testing.T) {
 }
 
 func Test_DBStore_GetUserByID_success(t *testing.T) {
-	createTestingTables()
-	defer dropTestingTables()
+	createTestingTables(t)
+	defer dropTestingTables(t)
 
 	err := s.gdb.Model(&User{}).Create(&User{
 		Email:        "mail",
@@ -397,8 +136,8 @@ func Test_DBStore_GetUserByID_success(t *testing.T) {
 }
 
 func Test_DBStore_GetUserByID_notFound(t *testing.T) {
-	createTestingTables()
-	defer dropTestingTables()
+	createTestingTables(t)
+	defer dropTestingTables(t)
 
 	err := s.gdb.Model(&User{}).Create(&User{
 		Email:        "mail",
@@ -416,8 +155,8 @@ func Test_DBStore_GetUserByID_notFound(t *testing.T) {
 }
 
 func Test_DBStore_GetUserByExternalID_success(t *testing.T) {
-	createTestingTables()
-	defer dropTestingTables()
+	createTestingTables(t)
+	defer dropTestingTables(t)
 
 	err := s.gdb.Model(&User{}).Create(&User{
 		ExternalID:   "eid",
@@ -450,8 +189,8 @@ func Test_DBStore_GetUserByExternalID_success(t *testing.T) {
 }
 
 func Test_DBStore_GetUser_byExternalID_notFound(t *testing.T) {
-	createTestingTables()
-	defer dropTestingTables()
+	createTestingTables(t)
+	defer dropTestingTables(t)
 
 	err := s.gdb.Model(&User{}).Create(&User{
 		ExternalID:   "eid",
@@ -469,8 +208,8 @@ func Test_DBStore_GetUser_byExternalID_notFound(t *testing.T) {
 }
 
 func Test_DBStore_GetUserByEmail_success(t *testing.T) {
-	createTestingTables()
-	defer dropTestingTables()
+	createTestingTables(t)
+	defer dropTestingTables(t)
 
 	err := s.gdb.Model(&User{}).Create(&User{
 		Email:        "mail",
@@ -503,8 +242,8 @@ func Test_DBStore_GetUserByEmail_success(t *testing.T) {
 }
 
 func Test_DBStore_GetUserByEmail_notFound(t *testing.T) {
-	createTestingTables()
-	defer dropTestingTables()
+	createTestingTables(t)
+	defer dropTestingTables(t)
 
 	err := s.gdb.Model(&User{}).Create(&User{
 		Email:        "mail",
@@ -523,8 +262,8 @@ func Test_DBStore_GetUserByEmail_notFound(t *testing.T) {
 }
 
 func Test_DBStore_AuthorizeUser_success(t *testing.T) {
-	createTestingTables()
-	defer dropTestingTables()
+	createTestingTables(t)
+	defer dropTestingTables(t)
 
 	password := "password"
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(password),
@@ -571,8 +310,8 @@ func Test_DBStore_AuthorizeUser_success(t *testing.T) {
 }
 
 func Test_DBStore_AuthorizeUser_wrongEmail(t *testing.T) {
-	createTestingTables()
-	defer dropTestingTables()
+	createTestingTables(t)
+	defer dropTestingTables(t)
 
 	password := "password"
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(password),
@@ -614,8 +353,8 @@ func Test_DBStore_AuthorizeUser_wrongEmail(t *testing.T) {
 }
 
 func Test_DBStore_AuthorizeUser_wrongPassword(t *testing.T) {
-	createTestingTables()
-	defer dropTestingTables()
+	createTestingTables(t)
+	defer dropTestingTables(t)
 
 	password := "password"
 
@@ -638,8 +377,8 @@ func Test_DBStore_AuthorizeUser_wrongPassword(t *testing.T) {
 }
 
 func Test_DBStore_SetUserName_success(t *testing.T) {
-	createTestingTables()
-	defer dropTestingTables()
+	createTestingTables(t)
+	defer dropTestingTables(t)
 
 	err := s.gdb.Model(&User{}).Create(&User{
 		Email:        "mail",
@@ -688,8 +427,8 @@ func Test_DBStore_SetUserName_success(t *testing.T) {
 }
 
 func Test_DBStore_SetUserEmail_success(t *testing.T) {
-	createTestingTables()
-	defer dropTestingTables()
+	createTestingTables(t)
+	defer dropTestingTables(t)
 
 	err := s.gdb.Model(&User{}).Create(&User{
 		Email:        "mail",
@@ -738,8 +477,8 @@ func Test_DBStore_SetUserEmail_success(t *testing.T) {
 }
 
 func Test_DBStore_SetUserEmailConfirmed_success(t *testing.T) {
-	createTestingTables()
-	defer dropTestingTables()
+	createTestingTables(t)
+	defer dropTestingTables(t)
 
 	err := s.gdb.Model(&User{}).Create(&User{
 		Email:          "mail",
@@ -790,8 +529,8 @@ func Test_DBStore_SetUserEmailConfirmed_success(t *testing.T) {
 }
 
 func Test_DBStore_SetUserPassword_success(t *testing.T) {
-	createTestingTables()
-	defer dropTestingTables()
+	createTestingTables(t)
+	defer dropTestingTables(t)
 
 	err := s.gdb.Model(&User{}).Create(&User{
 		Email:        "mail",
@@ -840,8 +579,8 @@ func Test_DBStore_SetUserPassword_success(t *testing.T) {
 }
 
 func Test_DBStore_SetUserAvatarURL_success(t *testing.T) {
-	createTestingTables()
-	defer dropTestingTables()
+	createTestingTables(t)
+	defer dropTestingTables(t)
 
 	err := s.gdb.Model(&User{}).Create(&User{
 		Email:        "mail",
@@ -890,8 +629,8 @@ func Test_DBStore_SetUserAvatarURL_success(t *testing.T) {
 }
 
 func Test_DBStore_GetUsers_success(t *testing.T) {
-	createTestingTables()
-	defer dropTestingTables()
+	createTestingTables(t)
+	defer dropTestingTables(t)
 
 	err := s.gdb.Model(&User{}).Create(&User{
 		Email:        "mail",
@@ -932,171 +671,9 @@ func Test_DBStore_GetUsers_success(t *testing.T) {
 	assert.Equal(t, "aurl2", users[1].AvatarURL)
 }
 
-func Test_DBStore_AddUserAddress_success(t *testing.T) {
-	createTestingTables()
-	defer dropTestingTables()
-
-	err := s.AddUserAddress(123, ETH, "some-addr")
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	var uas []UserAddress
-
-	err = s.gdb.Find(&uas).Error
-	if !assert.NoError(t, err) {
-		return
-	}
-	if !assert.Len(t, uas, 1) {
-		return
-	}
-
-	assert.Equal(t, uint(123), uas[0].UserID)
-	assert.Equal(t, ETH, uas[0].Coin)
-	assert.Equal(t, "some-addr", uas[0].Address)
-}
-
-func Test_DBStore_RemoveUserAddress_success(t *testing.T) {
-	createTestingTables()
-	defer dropTestingTables()
-
-	err := s.gdb.Create(&UserAddress{
-		UserID:  123,
-		Coin:    BTC,
-		Address: "addr1",
-	}).Error
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	err = s.gdb.Create(&UserAddress{
-		UserID:  123,
-		Coin:    BTC,
-		Address: "addr2",
-	}).Error
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	err = s.gdb.Create(&UserAddress{
-		UserID:  123,
-		Coin:    ETH,
-		Address: "addr3",
-	}).Error
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	err = s.gdb.Create(&UserAddress{
-		UserID:  234,
-		Coin:    BTC,
-		Address: "addr4",
-	}).Error
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	err = s.RemoveUserAddress(123, BTC, "addr2")
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	var uas []UserAddress
-
-	err = s.gdb.Order("user_id ASC, coin ASC, address ASC").
-		Find(&uas).Error
-	if !assert.NoError(t, err) {
-		return
-	}
-	if !assert.Len(t, uas, 3) {
-		return
-	}
-
-	assert.Equal(t, uint(123), uas[0].UserID)
-	assert.Equal(t, BTC, uas[0].Coin)
-	assert.Equal(t, "addr1", uas[0].Address)
-
-	assert.Equal(t, uint(123), uas[1].UserID)
-	assert.Equal(t, ETH, uas[1].Coin)
-	assert.Equal(t, "addr3", uas[1].Address)
-
-	assert.Equal(t, uint(234), uas[2].UserID)
-	assert.Equal(t, BTC, uas[2].Coin)
-	assert.Equal(t, "addr4", uas[2].Address)
-}
-
-func Test_DBStore_GetUserAddresses_success(t *testing.T) {
-	createTestingTables()
-	defer dropTestingTables()
-
-	err := s.gdb.Create(&UserAddress{
-		UserID:  123,
-		Coin:    ETH,
-		Address: "addr3",
-	}).Error
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	err = s.gdb.Create(&UserAddress{
-		UserID:  234,
-		Coin:    BTC,
-		Address: "addr4",
-	}).Error
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	err = s.gdb.Create(&UserAddress{
-		UserID:  123,
-		Coin:    BTC,
-		Address: "addr2",
-	}).Error
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	err = s.gdb.Create(&UserAddress{
-		UserID:  123,
-		Coin:    BTC,
-		Address: "addr1",
-	}).Error
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	err = s.RemoveUserAddress(123, BTC, "addr2")
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	var uas []UserAddress
-
-	err = s.gdb.Order("user_id ASC, coin ASC, address ASC").
-		Find(&uas).Error
-	if !assert.NoError(t, err) {
-		return
-	}
-	if !assert.Len(t, uas, 3) {
-		return
-	}
-
-	assert.Equal(t, uint(123), uas[0].UserID)
-	assert.Equal(t, BTC, uas[0].Coin)
-	assert.Equal(t, "addr1", uas[0].Address)
-
-	assert.Equal(t, uint(123), uas[1].UserID)
-	assert.Equal(t, ETH, uas[1].Coin)
-	assert.Equal(t, "addr3", uas[1].Address)
-
-	assert.Equal(t, uint(234), uas[2].UserID)
-	assert.Equal(t, BTC, uas[2].Coin)
-	assert.Equal(t, "addr4", uas[2].Address)
-}
-
 func Test_DBStore_AddUserEmailConfirmation_createSuccess(t *testing.T) {
-	createTestingTables()
-	defer dropTestingTables()
+	createTestingTables(t)
+	defer dropTestingTables(t)
 
 	ec, err := s.AddUserEmailConfirmation(123, "mail")
 	if !assert.NoError(t, err) {
@@ -1120,8 +697,8 @@ func Test_DBStore_AddUserEmailConfirmation_createSuccess(t *testing.T) {
 }
 
 func Test_DBStore_AddUserEmailConfirmation_updateSuccess(t *testing.T) {
-	createTestingTables()
-	defer dropTestingTables()
+	createTestingTables(t)
+	defer dropTestingTables(t)
 
 	s.gdb.Model(&UserEmailConfirmation{}).
 		Create(&UserEmailConfirmation{
@@ -1153,8 +730,8 @@ func Test_DBStore_AddUserEmailConfirmation_updateSuccess(t *testing.T) {
 }
 
 func Test_DBStore_GetUserEmailConfirmation_success(t *testing.T) {
-	createTestingTables()
-	defer dropTestingTables()
+	createTestingTables(t)
+	defer dropTestingTables(t)
 
 	s.gdb.Model(&UserEmailConfirmation{}).
 		Create(&UserEmailConfirmation{
@@ -1179,8 +756,8 @@ func Test_DBStore_GetUserEmailConfirmation_success(t *testing.T) {
 }
 
 func Test_DBStore_GetUserEmailConfirmation_notFound(t *testing.T) {
-	createTestingTables()
-	defer dropTestingTables()
+	createTestingTables(t)
+	defer dropTestingTables(t)
 
 	err := s.gdb.Model(&UserEmailConfirmation{}).
 		Create(&UserEmailConfirmation{
@@ -1198,8 +775,8 @@ func Test_DBStore_GetUserEmailConfirmation_notFound(t *testing.T) {
 }
 
 func Test_DBStore_RemoveUserEmailConfirmation_success(t *testing.T) {
-	createTestingTables()
-	defer dropTestingTables()
+	createTestingTables(t)
+	defer dropTestingTables(t)
 
 	s.gdb.Model(&UserEmailConfirmation{}).
 		Create(&UserEmailConfirmation{
@@ -1229,143 +806,4 @@ func Test_DBStore_RemoveUserEmailConfirmation_success(t *testing.T) {
 	assert.Equal(t, uint(123), ecs[0].UserID)
 	assert.Equal(t, "qwe", ecs[0].Code)
 	assert.Equal(t, "mail1", ecs[0].Email)
-}
-
-func Test_DBStore_GetProject_success(t *testing.T) {
-	createTestingTables()
-	defer dropTestingTables()
-
-	err := s.gdb.Create(&Project{Name: "name-1"}).Error
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	err = s.gdb.Create(&Project{Name: "name-2"}).Error
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	wantProject := Project{ID: 2, Name: "name-2"}
-
-	project, err := s.GetProject(2)
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	assert.Equal(t, wantProject, project)
-}
-
-func Test_DBStore_AddProject_success(t *testing.T) {
-	createTestingTables()
-	defer dropTestingTables()
-
-	err := s.AddProject("name")
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	wantProjects := []Project{{ID: 1, Name: "name"}}
-
-	var ps []Project
-
-	err = s.gdb.Find(&ps).Error
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	assert.Equal(t, wantProjects, ps)
-}
-
-func Test_DBStore_SetProjectName_success(t *testing.T) {
-	createTestingTables()
-	defer dropTestingTables()
-
-	err := s.gdb.Create(&Project{Name: "name-1"}).Error
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	err = s.gdb.Create(&Project{Name: "name-2"}).Error
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	err = s.SetProjectName(2, "name-2-changed")
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	wantProjects := []Project{
-		{ID: 1, Name: "name-1"},
-		{ID: 2, Name: "name-2-changed"},
-	}
-
-	var ps []Project
-
-	err = s.gdb.Order("id ASC").Find(&ps).Error
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	assert.Equal(t, wantProjects, ps)
-}
-
-func Test_DBStore_RemoveProject_success(t *testing.T) {
-	createTestingTables()
-	defer dropTestingTables()
-
-	err := s.gdb.Create(&Project{Name: "name-1"}).Error
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	err = s.gdb.Create(&Project{Name: "name-2"}).Error
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	err = s.RemoveProject(2)
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	wantProjects := []Project{
-		{ID: 1, Name: "name-1"},
-	}
-
-	var ps []Project
-
-	err = s.gdb.Find(&ps).Error
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	assert.Equal(t, wantProjects, ps)
-}
-
-func Test_DBStore_GetProjects_success(t *testing.T) {
-	createTestingTables()
-	defer dropTestingTables()
-
-	err := s.gdb.Create(&Project{Name: "name-2"}).Error
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	err = s.gdb.Create(&Project{Name: "name-1"}).Error
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	ps, err := s.GetProjects()
-	if !assert.NoError(t, err) {
-		return
-	}
-
-	wantProjects := []Project{
-		{ID: 2, Name: "name-1"},
-		{ID: 1, Name: "name-2"},
-	}
-
-	assert.Equal(t, wantProjects, ps)
 }
