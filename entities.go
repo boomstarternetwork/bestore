@@ -88,13 +88,13 @@ type Project struct {
 }
 
 type UserPasswordReset struct {
-	UserID    uint
+	UserID    uint `gorm:"primary"`
 	CreatedAt time.Time
 	Code      string
 }
 
 type UserEmailConfirmation struct {
-	UserID uint
+	UserID uint `gorm:"primary"`
 	Code   string
 	Email  string
 }
@@ -134,4 +134,13 @@ type UserWithdraw struct {
 	UserID uint
 	Status OperationStatus
 	Amount decimal.Decimal
+}
+
+type Balance struct {
+	ProjectID uint   `gorm:"column:projectid"`
+	PoolID    string `gorm:"column:poolid"`
+	Address   string
+	Amount    decimal.Decimal
+	Created   time.Time
+	Updated   time.Time
 }

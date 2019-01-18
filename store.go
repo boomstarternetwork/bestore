@@ -22,15 +22,6 @@ type Store interface {
 	SetUserAvatarURL(userID uint, avatarURL string) error
 	GetUsers() ([]User, error)
 
-	CheckProjectCategoryID(categoryID uint) error
-
-	AddCountry(id uint, name string) error
-	GetCountries() ([]Country, error)
-
-	AddCity(id uint, countryID uint, name string) error
-	GetCities(countryID uint) ([]City, error)
-	CheckCityID(cityID uint) error
-
 	GetUserPasswordReset(code string) (UserPasswordReset, error)
 	AddUserPasswordReset(userID uint) (UserPasswordReset, error)
 	RemoveUserPasswordReset(code string) error
@@ -40,31 +31,40 @@ type Store interface {
 		error)
 	RemoveUserEmailConfirmation(userID uint) error
 
-	GetUserKYC(userID uint) (UserKYC, error)
 	SetUserKYC(kyc UserKYC) error
+	GetUserKYC(userID uint) (UserKYC, error)
 
-	SetUserMiningCredential(userID uint, login string) (string, error)
-
-	GetUserMiningProject(userID uint) (UserMiningProject, error)
-	SetUserMiningProject(userID uint, projectID uint) error
-
-	GetUserWithdraw(userID uint) (UserWithdraw, error)
 	// SetUserWithdraw should error if status is WIP
 	SetUserWithdraw(userID uint, status OperationStatus,
 		amount decimal.Decimal) error
-	// RemoveUserWithdraw should error if exists and status is not
-	// Success or Failure.
+	GetUserWithdraw(userID uint) (UserWithdraw, error)
+
+	// RemoveUserWithdraw should error if exists and status is not Success or Failure.
 	RemoveUserWithdraw(userID uint) error
 
-	GetProject(projectID uint) (Project, error)
+	AddCountry(id uint, name string) error
+	GetCountries() ([]Country, error)
+
+	AddCity(id uint, countryID uint, name string) error
+	GetCities(countryID uint) ([]City, error)
+	CheckCityID(cityID uint) error
+
+	AddProjectCategory(name string) (ProjectCategory, error)
+	GetProjectCategories() ([]ProjectCategory, error)
+	CheckProjectCategoryID(categoryID uint) error
+
 	AddProject(p Project) (Project, error)
+	GetProject(projectID uint) (Project, error)
 	SetProject(p Project) (Project, error)
 	SetProjectModerationStatus(projectID uint,
 		moderationStatus OperationStatus) error
 	GetProjects(limit uint, offset uint, userID uint, categoryID uint,
 		statuses []ProjectStatus) ([]Project, uint, error)
 
-	GetProjectCategories() ([]ProjectCategory, error)
+	SetUserMiningCredential(userID uint, login string) (string, error)
+
+	SetUserMiningProject(userID uint, projectID uint) error
+	GetUserMiningProject(userID uint) (UserMiningProject, error)
 
 	GetMinedByUser(projectID uint, userID uint) (decimal.Decimal, error)
 }

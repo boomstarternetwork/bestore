@@ -2,6 +2,7 @@ package bestore
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -35,7 +36,7 @@ func NewDBStore(connStr string, runMode string) (*DBStore, error) {
 	return &DBStore{gdb: gdb}, nil
 }
 
-func (s *DBStore) AddUser(externalID, email, password, name, avatarURL string) (
+func (s *DBStore) AddUser(externalID, email, password, name, avatarURL, ethAddress string) (
 	User, error) {
 
 	if externalID == "" && email == "" {
@@ -79,6 +80,7 @@ func (s *DBStore) AddUser(externalID, email, password, name, avatarURL string) (
 		PasswordHash: passwordHash,
 		Name:         name,
 		AvatarURL:    avatarURL,
+		EthAddress:   ethAddress,
 	}
 
 	err = tx.Create(&u).Error
@@ -117,6 +119,7 @@ func (s *DBStore) AuthorizeUser(email, password string) (u User,
 	if err != nil {
 		return
 	}
+
 	err = bcrypt.CompareHashAndPassword(u.PasswordHash, []byte(password))
 	return
 }
@@ -167,6 +170,62 @@ func (s DBStore) GetUsers() (us []User, err error) {
 	return
 }
 
+//
+// Countries
+//
+
+func (s *DBStore) AddCountry(id uint, name string) error {
+	return s.gdb.Create(&Country{
+		ID:   id,
+		Name: name,
+	}).Error
+}
+
+func (s *DBStore) GetCountries() (cs []Country, err error) {
+	err = s.gdb.Model(&Country{}).Find(&cs).Error
+	return
+}
+
+//
+// Cities
+//
+
+func (s *DBStore) AddCity(id uint, countryID uint, name string) error {
+	return s.gdb.Create(&City{
+		ID:        id,
+		CountryID: countryID,
+		Name:      name,
+	}).Error
+}
+
+func (s *DBStore) GetCities(countryID uint) (cs []City, err error) {
+	err = s.gdb.Model(&City{}).
+		Where(&City{CountryID: countryID}).
+		Find(&cs).
+		Error
+	return
+}
+
+func (s *DBStore) CheckCityID(cityID uint) error {
+	var city City
+	err := s.gdb.Take(&city, City{ID: cityID}).Error
+	if gorm.IsRecordNotFoundError(err) {
+		return ErrInvalidCityID
+	}
+
+	return err
+}
+
+//
+// UserPassword
+//
+
+func (s *DBStore) GetUserPasswordReset(code string) (pr UserPasswordReset,
+	err error) {
+	err = s.gdb.Where(&UserPasswordReset{Code: code}).Take(&pr).Error
+	return
+}
+
 func (s *DBStore) AddUserPasswordReset(userID uint) (UserPasswordReset, error) {
 
 	var pr UserPasswordReset
@@ -211,60 +270,15 @@ func (s *DBStore) AddUserPasswordReset(userID uint) (UserPasswordReset, error) {
 	return pr, tx.Commit().Error
 }
 
-func (s *DBStore) GetUserPasswordReset(code string) (pr UserPasswordReset,
-	err error) {
-	err = s.gdb.Where(&UserPasswordReset{Code: code}).Take(&pr).Error
-	return
-}
-
 func (s *DBStore) RemoveUserPasswordReset(code string) error {
 	return s.gdb.Where(&UserPasswordReset{Code: code}).
 		Delete(&UserPasswordReset{}).
 		Error
 }
 
-func (s *DBStore) AddUserEmailConfirmation(userID uint,
-	email string) (UserEmailConfirmation, error) {
-
-	var ec UserEmailConfirmation
-
-	tx := s.gdb.Begin()
-	if tx.Error != nil {
-		return ec, tx.Error
-	}
-
-	err := tx.Take(&ec, UserEmailConfirmation{UserID: userID}).Error
-	if err != nil && err != gorm.ErrRecordNotFound {
-		tx.Rollback()
-		return ec, err
-	}
-
-	notFound := err == gorm.ErrRecordNotFound
-
-	ec.Code, err = password.Generate(64, 32, 0,
-		true, true)
-	if err != nil {
-		return ec, err
-	}
-
-	ec.UserID = userID
-	ec.Email = email
-
-	if notFound {
-		err = s.gdb.Create(&ec).Error
-	} else {
-		err = s.gdb.Model(&UserEmailConfirmation{}).
-			Where(&UserEmailConfirmation{UserID: userID}).
-			Update(&ec).Error
-	}
-
-	if err != nil {
-		tx.Rollback()
-		return ec, err
-	}
-
-	return ec, tx.Commit().Error
-}
+//
+// UserEmailConfirmation
+//
 
 func (s *DBStore) GetUserEmailConfirmation(userID uint) (ec UserEmailConfirmation,
 	err error) {
@@ -273,18 +287,103 @@ func (s *DBStore) GetUserEmailConfirmation(userID uint) (ec UserEmailConfirmatio
 	return
 }
 
+func (s *DBStore) AddUserEmailConfirmation(userID uint,
+	email string) (ec UserEmailConfirmation, err error) {
+
+	code, err := password.Generate(64, 32, 0, true, true)
+	if err != nil {
+		return ec, err
+	}
+
+	err = s.gdb.Where(UserEmailConfirmation{UserID: userID}).
+		Assign(UserEmailConfirmation{Email: email, Code: code}).
+		FirstOrCreate(&ec).Error
+
+	return
+}
 func (s *DBStore) RemoveUserEmailConfirmation(userID uint) error {
-	return s.gdb.Where(&UserEmailConfirmation{UserID: userID}).
-		Delete(&UserEmailConfirmation{}).
+	return s.gdb.Where(UserEmailConfirmation{UserID: userID}).
+		Delete(UserEmailConfirmation{}).
 		Error
 }
 
-func (s *DBStore) GetProject(projectID uint) (p Project, err error) {
-	err = s.gdb.Where(&Project{ID: projectID}).Take(&p).Error
-	ps := []Project{p}
-	err = s.setProjectsMiningStats(ps)
-	p = ps[0]
+//
+// KYC
+//
+
+func (s *DBStore) SetUserKYC(kyc UserKYC) error {
+	return s.gdb.Where(UserKYC{UserID: kyc.UserID}).Assign(kyc).FirstOrCreate(&kyc).Error
+}
+
+func (s *DBStore) GetUserKYC(userID uint) (kyc UserKYC, err error) {
+	err = s.gdb.Take(&kyc, UserKYC{UserID: userID}).Error
 	return
+}
+
+//
+// Withdraw
+//
+
+var ErrInvalidOperationStatus = errors.New("operation is not in success or failure status")
+
+func (s *DBStore) SetUserWithdraw(userID uint, status OperationStatus, amount decimal.Decimal) error {
+	var uw UserWithdraw
+	// err := s.gdb.Take(&uw, UserWithdraw{UserID: userID}).Error
+	// if err != nil && !gorm.IsRecordNotFoundError(err) {
+	// 	return err
+	// }
+
+	// if uw.Status == InitOS || uw.Status == WIPOS {
+	// 	return ErrInvalidOperationStatus
+	// }
+
+	uw.UserID = userID
+	uw.Status = status
+	uw.Amount = amount
+	return s.gdb.Where(UserWithdraw{UserID: userID}).Assign(uw).FirstOrCreate(&uw).Error
+}
+
+func (s *DBStore) GetUserWithdraw(userID uint) (uw UserWithdraw, err error) {
+	err = s.gdb.Take(&uw, UserWithdraw{UserID: userID}).Error
+	return
+}
+
+func (s *DBStore) RemoveUserWithdraw(userID uint) error {
+	var uw UserWithdraw
+	err := s.gdb.Take(&uw, UserWithdraw{UserID: userID}).Error
+	if err != nil {
+		return err
+	}
+
+	if uw.Status == InitOS || uw.Status == WIPOS {
+		return ErrInvalidOperationStatus
+	}
+
+	return s.gdb.Model(UserWithdraw{UserID: userID}).Delete(UserWithdraw{}).Error
+}
+
+//
+// ProjectCategories
+//
+
+func (s *DBStore) AddProjectCategory(name string) (cat ProjectCategory, err error) {
+	cat.Name = name
+	err = s.gdb.Create(&cat).Error
+	return
+}
+
+func (s *DBStore) GetProjectCategories() (pcs []ProjectCategory, err error) {
+	err = s.gdb.Order("name ASC").Find(&pcs).Error
+	return
+}
+
+func (s *DBStore) CheckProjectCategoryID(categoryID uint) error {
+	var cat ProjectCategory
+	err := s.gdb.Take(&cat, ProjectCategory{ID: categoryID}).Error
+	if gorm.IsRecordNotFoundError(err) {
+		return ErrInvalidCategoryID
+	}
+	return err
 }
 
 func (s *DBStore) AddProject(p Project) (Project, error) {
@@ -310,35 +409,30 @@ func (s *DBStore) AddProject(p Project) (Project, error) {
 	return np, err
 }
 
+func (s *DBStore) GetProject(projectID uint) (p Project, err error) {
+	err = s.gdb.Where(&Project{ID: projectID}).Take(&p).Error
+	ps := []Project{p}
+	err = s.setProjectsMiningStats(ps)
+	p = ps[0]
+	return
+}
+
 func (s *DBStore) checkProjectOwner(projectID uint, userID uint) error {
-	var exists bool
-	err := s.gdb.Raw(`
-		SELECT EXISTS(
-			SELECT 1
-			FROM projects
-			WHERE id = $1 AND user_id = $2
-		)
-	`, projectID, userID).Scan(&exists).Error
-	if err != nil {
-		return err
-	}
-	if !exists {
-		return ErrInvalidProjectOwner
-	}
-	return nil
+	var p Project
+	return s.gdb.Take(&p, Project{ID: projectID, UserID: userID}).Error
 }
 
 var ErrNotInDraftStatus = errors.New("project is not in draft status")
 
-func (s *DBStore) SetProject(p Project) error {
+func (s *DBStore) SetProject(p Project) (Project, error) {
 	err := s.checkProjectOwner(p.ID, p.UserID)
 	if err != nil {
-		return err
+		return Project{}, err
 	}
 
 	tx := s.gdb.Begin()
 	if tx.Error != nil {
-		return tx.Error
+		return Project{}, tx.Error
 	}
 
 	var c int
@@ -348,15 +442,16 @@ func (s *DBStore) SetProject(p Project) error {
 		Count(&c).Error
 	if err != nil {
 		tx.Rollback()
-		return tx.Error
+		return Project{}, tx.Error
 	}
 
 	if c != 1 {
-		return errors.New("project is not in draft status")
+		return Project{}, ErrNotInDraftStatus
 	}
 
 	np := Project{
 		ID:               p.ID,
+		UserID:           p.UserID,
 		Goal:             p.Goal,
 		DurationDays:     p.DurationDays,
 		CategoryID:       p.CategoryID,
@@ -370,26 +465,43 @@ func (s *DBStore) SetProject(p Project) error {
 		TwitterURL:       p.TwitterURL,
 	}
 
-	err = tx.Save(&np).Error
+	err = tx.Model(Project{ID: p.ID}).Updates(&np).Error
 	if err != nil {
 		tx.Rollback()
-		return err
+		return np, err
 	}
 
-	return tx.Commit().Error
+	return np, tx.Commit().Error
+}
+
+func (s *DBStore) SetProjectModerationStatus(projectID uint, moderationStatus OperationStatus) error {
+	return s.gdb.Model(Project{ID: projectID}).Updates(Project{ModerationStatus: moderationStatus}).Error
 }
 
 func (s *DBStore) GetProjects(limit uint, offset uint, userID uint,
 	categoryID uint, statuses []ProjectStatus) (ps []Project, total uint,
 	err error) {
 
-	q := s.gdb.Model(&Project{}).
-		Where(&Project{UserID: userID}).
-		Where(&Project{CategoryID: categoryID}).
-		Where("status IN (?)", statuses)
+	q := s.gdb.Model(&Project{})
+
+	//filter by specified
+	if userID > 0 {
+		q = q.Where(&Project{UserID: userID})
+	}
+	if categoryID > 0 {
+		q = q.Where(&Project{CategoryID: categoryID})
+	}
+	if len(statuses) > 0 {
+		q = q.Where("status IN (?)", statuses)
+	}
 
 	err = q.Count(&total).Error
 	if err != nil {
+		return
+	}
+
+	//if total is 0 then do not to search projects
+	if total == 0 {
 		return
 	}
 
@@ -408,6 +520,11 @@ func (s *DBStore) GetProjects(limit uint, offset uint, userID uint,
 }
 
 func (s *DBStore) setProjectsMiningStats(ps []Project) error {
+	//if there are no projects, there is nothing to do
+	if len(ps) == 0 {
+		return nil
+	}
+
 	idToIdx := map[uint]int{}
 	var ids []string
 
@@ -463,74 +580,58 @@ func (s *DBStore) setProjectsMiningStats(ps []Project) error {
 	return nil
 }
 
-func (s *DBStore) CheckCategoryID(categoryID uint) error {
-	var exists bool
-	err := s.gdb.Raw(`
-		SELECT EXISTS(
-			SELECT 1
-			FROM project_categories
-			WHERE id = $1
-		)
-	`, categoryID).Scan(&exists).Error
+//
+// UserMining
+//
+
+//SetUserMiningCredential generate a new password, insert or update record with it, and return a generated password
+func (s *DBStore) SetUserMiningCredential(userID uint, login string) (pass string, err error) {
+	pass, err = password.Generate(12, 4, 4, false, true)
 	if err != nil {
-		return err
+		err = fmt.Errorf("failed to generate a password: %v", err)
+		return
 	}
-	if !exists {
-		return ErrInvalidCategoryID
-	}
-	return nil
-}
 
-func (s *DBStore) AddCountry(id uint, name string) error {
-	return s.gdb.Create(&Country{
-		ID:   id,
-		Name: name,
-	}).Error
-}
-
-func (s *DBStore) GetCountries() (cs []Country, err error) {
-	err = s.gdb.Model(&Country{}).Find(&cs).Error
-	return
-}
-
-func (s *DBStore) AddCity(id uint, countryID uint, name string) error {
-	return s.gdb.Create(&City{
-		ID:        id,
-		CountryID: countryID,
-		Name:      name,
-	}).Error
-}
-
-func (s *DBStore) GetCities(countryID uint) (cs []City, err error) {
-	err = s.gdb.Model(&City{}).
-		Where(&City{CountryID: countryID}).
-		Find(&cs).
-		Error
-	return
-}
-
-func (s *DBStore) CheckCityID(cityID uint) error {
-	var exists bool
-	err := s.gdb.Raw(`
-		SELECT EXISTS(
-			SELECT 1
-			FROM cities
-			WHERE id = $1
-		)
-	`, cityID).Scan(&exists).Error
+	hash, err := bcrypt.GenerateFromPassword([]byte(pass), bcrypt.DefaultCost)
 	if err != nil {
-		return err
+		err = fmt.Errorf("failed to generate a password hash: %v", err)
+		return
 	}
-	if !exists {
-		return ErrInvalidCityID
+
+	var umc = UserMiningCredential{
+		UserID:       userID,
+		Login:        login,
+		PasswordHash: hash,
 	}
-	return nil
+	err = s.gdb.Where(UserMiningCredential{UserID: userID}).Assign(umc).FirstOrCreate(&umc).Error
+	if err != nil {
+		err = fmt.Errorf("insert or update failed: %v", err)
+	}
+
+	return
 }
 
-func (s *DBStore) GetProjectCategories() (pcs []ProjectCategory, err error) {
-	err = s.gdb.Model(&ProjectCategory{}).
-		Order("name ASC").
-		Find(&pcs).
-		Error
+func (s *DBStore) SetUserMiningProject(userID uint, projectID uint) error {
+	var ump = UserMiningProject{
+		UserID:    userID,
+		ProjectID: projectID,
+		UpdatedAt: time.Now(),
+	}
+	return s.gdb.Where(UserMiningProject{UserID: userID}).Assign(ump).FirstOrCreate(&ump).Error
+}
+
+func (s *DBStore) GetUserMiningProject(userID uint) (ump UserMiningProject, err error) {
+	err = s.gdb.Take(&ump, UserMiningProject{UserID: userID}).Error
 	return
+}
+
+func (s *DBStore) GetMinedByUser(projectID uint, userID uint) (balance decimal.Decimal, err error) {
+	u, err := s.GetUserByID(userID)
+	if err != nil {
+		return balance, err
+	}
+
+	var b Balance
+	err = s.gdb.Take(&b, Balance{ProjectID: projectID, Address: u.EthAddress}).Error
+	return b.Amount, err
 }
