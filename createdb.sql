@@ -18,7 +18,7 @@ CREATE TABLE users
 CREATE TABLE project_categories
 (
   id BIGSERIAL NOT NULL PRIMARY KEY,
-  name TEXT NOT NULL
+  name TEXT NOT NULL UNIQUE
 );
 
 CREATE TABLE countries
@@ -44,10 +44,10 @@ CREATE TABLE projects
   status TEXT NOT NULL,
 
   moderation_status TEXT NOT NULL,
-  moderation_failure_message TEXT NOT NULL DEFAULT '',
+  moderation_reject_message TEXT NOT NULL DEFAULT '',
 
   goal DECIMAL NOT NULL,
-  duration INT NOT NULL,
+  duration_days INT NOT NULL,
 
   category_id BIGINT NOT NULL REFERENCES project_categories(id),
   city_id BIGINT NOT NULL REFERENCES cities(id),
