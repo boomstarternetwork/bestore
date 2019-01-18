@@ -7,7 +7,7 @@ import (
 )
 
 type User struct {
-	ID             uint       `json:"id"`
+	ID             uint       `json:"id,string"`
 	ExternalID     string     `json:"-"`
 	CreatedAt      time.Time  `json:"-"`
 	UpdatedAt      time.Time  `json:"-"`
@@ -21,17 +21,17 @@ type User struct {
 }
 
 type ProjectCategory struct {
-	ID   uint   `json:"id"`
+	ID   uint   `json:"id,string"`
 	Name string `json:"name"`
 }
 
 type Country struct {
-	ID   uint   `json:"id"`
+	ID   uint   `json:"id,string"`
 	Name string `json:"name"`
 }
 
 type City struct {
-	ID        uint   `json:"id"`
+	ID        uint   `json:"id,string"`
 	CountryID uint   `json:"country"`
 	Name      string `json:"name"`
 }
@@ -63,8 +63,8 @@ func (s ProjectStatus) String() string {
 }
 
 type Project struct {
-	ID                      uint            `json:"id"`
-	UserID                  uint            `json:"user"`
+	ID                      uint            `json:"id,string"`
+	UserID                  uint            `json:"user,string"`
 	CreatedAt               time.Time       `json:"-"`
 	Status                  ProjectStatus   `json:"status"`
 	ModerationStatus        OperationStatus `json:"moderationStatus"`
@@ -88,13 +88,13 @@ type Project struct {
 }
 
 type UserPasswordReset struct {
-	UserID    uint `gorm:"primary"`
+	UserID    uint
 	CreatedAt time.Time
 	Code      string
 }
 
 type UserEmailConfirmation struct {
-	UserID uint `gorm:"primary"`
+	UserID uint
 	Code   string
 	Email  string
 }
