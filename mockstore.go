@@ -217,6 +217,11 @@ func (ms *MockStore) GetProjects(limit uint, offset uint, userID uint,
 	return projects.([]Project), count, args.Error(2)
 }
 
+func (ms *MockStore) AddProjectCategory(name string) (ProjectCategory, error) {
+	args := ms.Called()
+	return ProjectCategory{Name: name}, args.Error(1)
+}
+
 func (ms *MockStore) GetProjectCategories() ([]ProjectCategory, error) {
 	args := ms.Called()
 	projects := args.Get(0)
