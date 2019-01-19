@@ -696,7 +696,7 @@ func Test_DBStore_GetCountries(t *testing.T) {
 
 var CityID uint = 1
 
-func Test_DBStore_AddCite(t *testing.T) {
+func Test_DBStore_AddCity(t *testing.T) {
 	name := "test-city"
 
 	err := s.AddCity(CityID, CountryID, name)
