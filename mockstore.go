@@ -217,7 +217,8 @@ func (ms *MockStore) GetProjects(limit uint, offset uint, userID uint, categoryI
 	if projects == nil {
 		return nil, 0, args.Error(2)
 	}
-	return projects, uint(len(projects)), args.Error(1)
+	count := args.Get(1).(uint)
+	return projects, count, args.Error(2)
 }
 
 func (ms *MockStore) AddProjectCategory(name string) (ProjectCategory, error) {
