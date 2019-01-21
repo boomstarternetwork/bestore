@@ -79,7 +79,7 @@ func Test_DBStore_AddUser_createSuccess(t *testing.T) {
 	UserID = u.ID
 
 	assert.Equal(t, "external-id", u.ExternalID)
-	assert.Equal(t, "Email", u.Email)
+	assert.Equal(t, "email", u.Email)
 	assert.NotEmpty(t, u.PasswordHash)
 	assert.Equal(t, "name", u.Name)
 	assert.Equal(t, "aurl", u.AvatarURL)
@@ -94,7 +94,7 @@ func Test_DBStore_AddUser_createSuccess(t *testing.T) {
 	}
 
 	assert.Equal(t, "external-id", users[0].ExternalID)
-	assert.Equal(t, "Email", users[0].Email)
+	assert.Equal(t, "email", users[0].Email)
 	assert.NotEmpty(t, users[0].PasswordHash)
 	assert.Equal(t, "name", users[0].Name)
 	assert.Equal(t, "aurl", users[0].AvatarURL)
