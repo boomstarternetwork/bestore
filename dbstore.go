@@ -44,6 +44,8 @@ func (s *DBStore) AddUser(externalID, email, password, name, avatarURL, ethAddre
 			"both external ID and email are empty")
 	}
 
+	email = strings.ToLower(email)
+
 	tx := s.gdb.Begin()
 	if tx.Error != nil {
 		return User{}, tx.Error
@@ -108,14 +110,14 @@ func (s *DBStore) GetUserByExternalID(externalID string) (u User,
 
 func (s *DBStore) GetUserByEmail(email string) (u User,
 	err error) {
-	err = s.gdb.Where(&User{Email: email}).
+	err = s.gdb.Where(&User{Email: strings.ToLower(email)}).
 		Take(&u).Error
 	return
 }
 
 func (s *DBStore) AuthorizeUser(email, password string) (u User,
 	err error) {
-	err = s.gdb.Where(&User{Email: email}).Take(&u).Error
+	err = s.gdb.Where(&User{Email: strings.ToLower(email)}).Take(&u).Error
 	if err != nil {
 		return
 	}
@@ -127,7 +129,7 @@ func (s *DBStore) AuthorizeUser(email, password string) (u User,
 func (s *DBStore) SetUserEmail(userID uint, email string) error {
 	return s.gdb.Model(&User{}).
 		Where(&User{ID: userID}).
-		Update(map[string]interface{}{"email": email,
+		Update(map[string]interface{}{"email": strings.ToLower(email),
 			"email_confirmed": false}).
 		Error
 }
@@ -294,6 +296,8 @@ func (s *DBStore) AddUserEmailConfirmation(userID uint,
 	if err != nil {
 		return ec, err
 	}
+
+	email = strings.ToLower(email)
 
 	err = s.gdb.Where(UserEmailConfirmation{UserID: userID}).
 		Assign(UserEmailConfirmation{Email: email, Code: code}).
