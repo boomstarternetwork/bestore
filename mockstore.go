@@ -1,8 +1,6 @@
 package bestore
 
 import (
-	"log"
-
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/mock"
 )
@@ -213,16 +211,13 @@ func (ms *MockStore) SetProjectModerationStatus(projectID uint,
 	return args.Error(0)
 }
 
-func (ms *MockStore) GetProjects(limit uint, offset uint, userID uint,
-	categoryID uint, statuses []ProjectStatus) ([]Project, uint, error) {
+func (ms *MockStore) GetProjects(limit uint, offset uint, userID uint, categoryID uint, statuses []ProjectStatus) ([]Project, uint, error) {
 	args := ms.Called()
-	log.Println(args)
-	projects := args.Get(0)
-	count := args.Get(1).(uint)
+	projects := args.Get(0).([]Project)
 	if projects == nil {
-		return nil, count, args.Error(2)
+		return nil, 0, args.Error(2)
 	}
-	return projects.([]Project), count, args.Error(2)
+	return projects, uint(len(projects)), args.Error(1)
 }
 
 func (ms *MockStore) AddProjectCategory(name string) (ProjectCategory, error) {
