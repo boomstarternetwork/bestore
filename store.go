@@ -27,6 +27,7 @@ type Store interface {
 	RemoveUserPasswordReset(code string) error
 
 	GetUserEmailConfirmation(userID uint) (UserEmailConfirmation, error)
+	GetUserEmailConfirmationByCode(code string) (UserEmailConfirmation, error)
 	AddUserEmailConfirmation(userID uint, email string) (UserEmailConfirmation,
 		error)
 	RemoveUserEmailConfirmation(userID uint) error

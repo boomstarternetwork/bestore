@@ -284,8 +284,13 @@ func (s *DBStore) RemoveUserPasswordReset(code string) error {
 
 func (s *DBStore) GetUserEmailConfirmation(userID uint) (ec UserEmailConfirmation,
 	err error) {
-	err = s.gdb.Where(&UserEmailConfirmation{UserID: userID}).
-		Take(&ec).Error
+	err = s.gdb.Take(&ec, &UserEmailConfirmation{UserID: userID}).Error
+	return
+}
+
+func (s *DBStore) GetUserEmailConfirmationByCode(code string) (ec UserEmailConfirmation,
+	err error) {
+	err = s.gdb.Take(&ec, &UserEmailConfirmation{Code: code}).Error
 	return
 }
 

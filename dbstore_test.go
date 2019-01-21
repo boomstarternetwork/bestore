@@ -550,6 +550,21 @@ func Test_DBStore_GetUserEmailConfirmation_notFound(t *testing.T) {
 	assert.True(t, NotFound(err))
 }
 
+func Test_DBStore_GetUserEmailConfirmationByCode(t *testing.T) {
+	err := s.gdb.Create(&UserEmailConfirmation{
+		UserID: UserID,
+		Code:   "bycode",
+		Email:  "some-email-addr",
+	}).Error
+	if !assert.NoError(t, err) {
+		return
+	}
+
+	ec, err := s.GetUserEmailConfirmationByCode("bycode")
+	assert.NoError(t, err)
+	assert.Equal(t, "some-email-addr", ec.Email)
+}
+
 func Test_DBStore_RemoveUserEmailConfirmation_success(t *testing.T) {
 	s.gdb.Create(&UserEmailConfirmation{
 		UserID: UserID,
