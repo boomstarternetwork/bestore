@@ -71,8 +71,8 @@ type Project struct {
 	ModerationRejectMessage string          `json:"moderationRejectStatus"`
 	Goal                    decimal.Decimal `json:"goal"`
 	DurationDays            uint            `json:"duration"`
-	CategoryID              uint            `json:"category"`
-	CityID                  uint            `json:"city"`
+	CategoryID              uint            `json:"category,string"`
+	CityID                  uint            `json:"city,string"`
 	Title                   string          `json:"title"`
 	ShortDescription        string          `json:"shortDescription"`
 	FullDescription         string          `json:"fullDescription"`
